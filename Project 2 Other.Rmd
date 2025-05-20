@@ -1,0 +1,136 @@
+---
+title: "Project 2: IMDB Movies"
+author: Sydney and Meg
+output: html_document
+runtime: shiny
+---
+
+```{r label=setup, include=FALSE}
+#Importing packages and cleaning the dataset
+library(tidyverse) 
+library(reactable)
+
+movies <- read_csv("imdb_top_1000.csv") %>%
+  unite("Stars", 11:14) %>%
+  mutate(Genre = as.vector(str_split(Genre, ", ")),
+         Runtime = parse_number(Runtime),
+         Released_Year = parse_number(Released_Year),
+         Gross_In_Millions = (Gross/1000000),
+         Certificate = fct_collapse(Certificate,
+           A = c("A", "Approved"),
+           G = "G",
+           PG = c("GP", "PG"),
+           `PG-13` = "PG-13",
+           Passed = "Passed",
+           R = "R",
+           `TV-14` = "TV-14",
+           `TV-MA` = "TV-MA",
+           `TV-PG` = "TV-PG",
+           U = c("U", "U/A", "UA", "Unrated")),
+         Stars = as.vector(str_split(Stars, "_"))) %>%
+  select(-c(Overview, Gross, Poster_Link))
+glimpse(movies)
+```
+
+
+```{r label=shiny_app_code, echo = FALSE}
+ui <- fluidPage(
+  titlePanel("Top 1000 Movies by Genre as rated by IMDB"),
+  
+  # build a sidebar layout
+  sidebarLayout(
+    sidebarPanel(
+      p("Select the variables:"),
+      # y variables input selection
+      selectInput(inputId = "y_var",
+                  label = "Select Y Variable",
+                  choices = c("Gross_In_Millions", "Released_Year", "Runtime", "IMDB_Rating", "Meta_score", "No_of_Votes")),
+      # x variables input selection
+      selectInput(inputId = "x_var",
+                  label = "Select X Variable",
+                  choices = c("Released_Year", "Runtime", "IMDB_Rating", "Meta_score", "No_of_Votes", "Gross_In_Millions")),
+      # filter by genre input checkbox
+      checkboxInput(inputId = "genre_filter",
+                    label = "Filter by Genre?",
+                    value = FALSE),
+      # filter by genre input selection
+      selectInput(inputId = "genres",
+                  label = "Select Genres",
+                  choices = c("Action", "Adventure", "Biography", "Comedy", "Crime", "Drama", "Family", "Fantasy", "History", "Horror", "Mystery", "Romance", "Sci-Fi", "Thriller", "War", "Western")),
+      # year double slider input
+      sliderInput(inputId = "year_filter",
+                  label = "Filter the Year Released",
+                  value = c(1920, 2020),
+                  min = 1920,
+                  max = 2020)
+    ),
+    mainPanel(
+      # display our plot and tables
+      p("Use this app to explore the relationship between different variables in the IMDB Top 1000 Movies Dataset!"),
+      plotOutput("plot"), # display plot
+      p("Response Variable Summary Stats:"),
+      tableOutput("table"), # display table
+      p("Interactive Table:"),
+      p("Click on a column header to sort that column"),
+      reactableOutput("table_interact") # display reactice table
+    )
+  )
+)
+
+server <- function(input, output) ({
+  # reactive function
+  modify_year <- reactive({ # reactive start
+      # filter by slider year
+      movies %>%
+        filter(Released_Year >= input$year_filter[1] & Released_Year <= input$year_filter[2])
+      # filter by genre
+      if (input$genre_filter) {return(movies%>%filter(str_detect(Genre, input$genres)))}
+      return(movies)
+        #filter(str_detect(Genre, input$genres))
+    })
+  
+  # build our plots
+  output$plot <- renderPlot({
+    modify_year() %>%
+      ggplot(aes(x = get(input$x_var), y = get(input$y_var), color = Certificate)) + # x and y inputs
+      geom_point() +
+      theme_minimal() +
+      labs(title = "Top 1000 Movies on IMDB",
+           x = input$x_var,
+           y = input$y_var,
+           color = "Certificate")
+  })
+
+  # display our summary table
+  output$table <- renderTable({
+    modify_year() %>%
+      # table summary stats
+      summarise(Min = min(get(input$y_var), na.rm = T),
+                Q1 = quantile(get(input$y_var), 0.25, na.rm = T),
+                Median = median(get(input$y_var), na.rm = T),
+                Q3 = quantile(get(input$y_var), 0.75, na.rm = T),
+                Max = max(get(input$y_var), na.rm = T))
+  })
+  
+  # display our reactive table
+  output$table_interact <- renderReactable({
+    # rename column names in reactive table
+    reactable(movies, 
+                columns = list(
+    Series_Title = colDef(name = "Title"),
+    Released_Year = colDef(name = "Release Year"),
+    Certificate = colDef(name = "Certificate"),
+    Runtime = colDef(name = "Runtime"),
+    Genre = colDef(name = "Genre"),
+    IMDB_Rating = colDef(name = "IMDB Rating"),
+    Meta_score = colDef(name = "Meta Score"),
+    Director = colDef(name = "Director"),
+    Stars = colDef(name = "Stars"),
+    No_of_Votes = colDef(name = "IMDB Votes"),
+    Gross_In_Millions = colDef(name = "Gross Income (M)")),
+                searchable = TRUE)
+    })
+})
+
+shinyApp(ui = ui, server = server)
+```
