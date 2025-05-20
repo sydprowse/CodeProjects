@@ -1,0 +1,63 @@
+---
+title: "Project 5 Code"
+author: "Sydney Prowse"
+output: pdf_document
+---
+
+Load data and packages
+
+```{r messgae=FALSE}
+library(Stat2Data)
+library(tidyverse)
+#library(mosaic)
+kidney <- read_csv("./kidney.csv")
+```
+
+## Clean Dataset
+```{r}
+kidney <- kidney %>% 
+  mutate(alcohol = factor(alcohol, levels = c("0", "1", "2"))) %>%
+  mutate(alcohol = fct_recode(alcohol, 
+    "None" = "0",
+    "Moderate" = "1",
+    "Severe" = "2"))
+kidney
+```
+
+## Model Investigation
+
+Investigate graph
+```{r}
+kidney %>%
+  ggplot(aes(x=kidney_fn, y=log(time), color=alcohol)) +
+  geom_point() +
+  labs(title="Scatterplot of Patient Kidney Function vs Survival Time", x="Kidney Function", y="log(Survival Time) (days)", color="Alcohol Consumption") +
+  geom_smooth(method="lm", se=F)
+```
+
+
+Build my models
+```{r}
+kid_model <- lm(log(time) ~ kidney_fn + alcohol, data = kidney)
+kid_null <- lm(log(time) ~ kidney_fn, data = kidney)
+kid_int <- lm(log(time) ~ kidney_fn + alcohol + kidney_fn*alcohol, data = kidney)
+```
+
+Relationship Investigation
+```{r}
+summary(kid_null)
+confint(kid_null)
+```
+p-value < 0.0001 (t = 12.98 and df = 136), there is very strong evidence.
+
+
+Check Models: top down so start with int model and full model
+```{r}
+anova(kid_model, kid_int)
+```
+
+Get parameter estimates
+```{r}
+summary(kid_int)
+```
+
